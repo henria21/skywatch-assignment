@@ -1,0 +1,12 @@
+[master]
+${master_public} node_role=master master_private_ip=${master_private}
+
+[workers]
+${worker_public}  node_role=worker
+${worker2_public} node_role=worker2
+
+[all:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=${ssh_key}
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+master_private_ip=${master_private}
