@@ -1,0 +1,33 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: skywatch
+      RABBITMQ_DEFAULT_PASS: skywatch-dev
+    ports: ["5672:5672", "15672:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build: ./app/frontend
+    command: gunicorn -b 0.0.0.0:5000 -w 4 --threads 4 app:app
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: skywatch
+      RABBITMQ_PASSWORD: skywatch-dev
+    ports: ["5000:5000"]
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+
+  worker:
+    build: ./app/worker
+    command: python worker.py
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: skywatch
+      RABBITMQ_PASSWORD: skywatch-dev
+    depends_on:
+      rabbitmq: {condition: service_healthy}

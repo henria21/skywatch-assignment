@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+<head><title>SkyWatch</title></head>
+<body style="font-family: sans-serif; max-width: 480px; margin: 3rem auto;">
+  <h1>🌤️ SkyWatch</h1>
+  <form method="post">
+    <input name="city" placeholder="City name" autofocus>
+    <button type="submit">Get weather</button>
+  </form>
+  {% if error %}<p style="color:#b91c1c">{{ error }}</p>{% endif %}
+  {% if result %}
+    <h2>{{ result.city }}{% if result.country %}, {{ result.country }}{% endif %}</h2>
+    <p>Temperature: {{ result.temperature_c }} °C</p>
+  {% endif %}
+</body>
+</html>

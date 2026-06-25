@@ -1,0 +1,21 @@
+# Terraform — state contains secrets in plaintext
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+terraform/.terraform.lock.hcl   # optional: keep this one if you want pinned providers
+
+# Ansible — generated inventory + the kubeconfig + vault password
+ansible/inventory.ini
+kubeconfig
+.vault_pass
+*.vault_pass*
+
+# SSH keys
+*.pem
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
