@@ -1,0 +1,14 @@
+- hosts: master
+  become: true
+  roles: [k3s_master]
+
+- hosts: workers
+  become: true
+  roles: [k3s_worker]
+
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    kubeconfig_path: "{{ playbook_dir }}/../kubeconfig"
+  roles: [bootstrap]

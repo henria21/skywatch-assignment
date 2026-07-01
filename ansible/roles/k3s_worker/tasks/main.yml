@@ -1,0 +1,45 @@
+- name: Check if k3s-agent is active
+  ansible.builtin.command: systemctl is-active k3s-agent
+  register: agent_status
+  failed_when: false
+  changed_when: false
+
+- name: Join cluster as agent
+  ansible.builtin.shell: |
+    curl -sfL https://get.k3s.io | \
+      INSTALL_K3S_VERSION=v1.29.5+k3s1 \
+      K3S_URL=https://{{ master_private_ip }}:6443 \
+      K3S_TOKEN={{ hostvars[groups['master'][0]]['k3s_token'] }} \
+      sh -s - agent \
+        --node-name skywatch-{{ node_role }}
+  when: agent_status.stdout != "active"
+
+- name: Label worker2 for app + monitoring placement
+  ansible.builtin.command: >
+    k3s kubectl label node skywatch-worker2 skywatch-role=app --overwrite
+  delegate_to: "{{ groups['master'][0] }}"
+  when: node_role == "worker2"
+
+# Swap for worker2 only — gives monitoring headroom on a 1 GiB node
+- name: Create 2G swapfile
+  ansible.builtin.command: fallocate -l 2G /swapfile
+  args: { creates: /swapfile }
+  when: node_role == "worker2"
+
+- name: Set swapfile permissions
+  ansible.builtin.file:
+    path: /swapfile
+    mode: '0600'
+  when: node_role == "worker2"
+
+- name: mkswap
+  ansible.builtin.command: mkswap /swapfile
+  register: mkswap_result
+  failed_when: mkswap_result.rc != 0 and 'already' not in mkswap_result.stderr
+  changed_when: "'Setting up swapspace' in mkswap_result.stdout"
+  when: node_role == "worker2"
+
+- name: swapon
+  ansible.builtin.shell: swapon /swapfile || true
+  changed_when: false
+  when: node_role == "worker2"

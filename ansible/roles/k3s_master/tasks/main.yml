@@ -1,0 +1,42 @@
+- name: Check if k3s is active
+  ansible.builtin.command: systemctl is-active k3s
+  register: k3s_status
+  failed_when: false
+  changed_when: false
+
+- name: Install K3s server (pinned)
+  ansible.builtin.shell: |
+    curl -sfL https://get.k3s.io | \
+      INSTALL_K3S_VERSION=v1.29.5+k3s1 \
+      sh -s - server \
+        --disable traefik \
+        --node-name skywatch-master \
+        --tls-san {{ ansible_host }} \
+        --node-taint node-role.kubernetes.io/control-plane=:NoSchedule
+  when: k3s_status.stdout != "active"
+
+- name: Wait for node-token
+  ansible.builtin.wait_for:
+    path: /var/lib/rancher/k3s/server/node-token
+
+- name: Read join token
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_token_b64
+
+- name: Set token fact
+  ansible.builtin.set_fact:
+    k3s_token: "{{ k3s_token_b64.content | b64decode | trim }}"
+
+- name: Fetch kubeconfig to control machine
+  ansible.builtin.fetch:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "{{ playbook_dir }}/../kubeconfig"
+    flat: true
+
+- name: Rewrite kubeconfig server to public IP
+  ansible.builtin.replace:
+    path: "{{ playbook_dir }}/../kubeconfig"
+    regexp: 'https://127.0.0.1:6443'
+    replace: "https://{{ ansible_host }}:6443"
+  delegate_to: localhost

@@ -1,0 +1,59 @@
+- name: Install ArgoCD via Helm
+  kubernetes.core.helm:
+    name: argocd
+    chart_ref: argo-cd
+    chart_repo_url: https://argoproj.github.io/argo-helm
+    chart_version: "7.*"
+    release_namespace: argocd
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    values:
+      global:
+        nodeSelector: { kubernetes.io/hostname: skywatch-worker }
+      server:
+        service:
+          type: NodePort
+          nodePortHttps: 30081
+    wait: true
+
+# GATE 1 — Application CRD must exist before we can apply the root Application
+- name: Wait for Application CRD established
+  kubernetes.core.k8s_info:
+    api_version: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    name: applications.argoproj.io
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: appcrd
+  until: appcrd.resources | length > 0
+  retries: 30
+  delay: 5
+
+- name: Ensure skywatch-assignment namespace exists
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata: { name: skywatch-assignment }
+
+- name: Create the rabbitmq secret
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata: { name: skywatch-assignment-rabbitmq, namespace: skywatch-assignment }
+      type: Opaque
+      stringData:
+        RABBITMQ_DEFAULT_USER: "{{ vault_rabbitmq_user }}"
+        RABBITMQ_DEFAULT_PASS: "{{ vault_rabbitmq_password }}"
+        rabbitmq-username:     "{{ vault_rabbitmq_user }}"
+        rabbitmq-password:     "{{ vault_rabbitmq_password }}"
+
+- name: Apply the ArgoCD root application
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+    src: "{{ playbook_dir }}/../argocd/root-app.yaml"
