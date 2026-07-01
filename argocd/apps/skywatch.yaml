@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: skywatch-assignment
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/henria21/skywatch-assignment
+    targetRevision: main
+    path: helm/skywatch-assignment
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: skywatch-assignment
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true ]

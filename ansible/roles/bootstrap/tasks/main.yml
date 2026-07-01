@@ -13,6 +13,7 @@
 
 - name: Install ArgoCD via Helm
   kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_path }}"
     name: argocd
     chart_ref: argo-cd
     chart_repo_url: https://argoproj.github.io/argo-helm
@@ -31,6 +32,7 @@
 # GATE 1 — Application CRD must exist before we can apply the root Application
 - name: Wait for Application CRD established
   kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
     api_version: apiextensions.k8s.io/v1
     kind: CustomResourceDefinition
     name: applications.argoproj.io
@@ -41,6 +43,7 @@
 
 - name: Ensure skywatch-assignment namespace exists
   kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
     state: present
     definition:
       apiVersion: v1
@@ -49,6 +52,7 @@
 
 - name: Create the rabbitmq secret
   kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
     state: present
     definition:
       apiVersion: v1
@@ -63,5 +67,6 @@
 
 - name: Apply the ArgoCD root application
   kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
     state: present
     src: "{{ playbook_dir }}/../argocd/root-app.yaml"
