@@ -1,12 +1,12 @@
 frontend:
-  image: {repository: ghcr.io/henria21/skywatch-assignment-frontend, tag: 18e0c03}
+  image: {repository: ghcr.io/henria21/skywatch-assignment-frontend, tag: 112899b}
   replicas: 2
   nodePort: 30080
   resources:
     requests: {cpu: 50m, memory: 64Mi}
     limits: {cpu: 250m, memory: 128Mi}
 worker:
-  image: {repository: ghcr.io/henria21/skywatch-assignment-worker, tag: 18e0c03}
+  image: {repository: ghcr.io/henria21/skywatch-assignment-worker, tag: 112899b}
   replicas: 2
   resources:
     requests: {cpu: 50m, memory: 64Mi}
