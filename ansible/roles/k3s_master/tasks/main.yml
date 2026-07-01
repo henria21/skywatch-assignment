@@ -37,6 +37,6 @@
 - name: Rewrite kubeconfig server to public IP
   ansible.builtin.replace:
     path: "{{ playbook_dir }}/../kubeconfig"
-    regexp: 'https://127.0.0.1:6443'
+    regexp: 'https://(127\.0\.0\.1|localhost):6443'
     replace: "https://{{ ansible_host }}:6443"
   delegate_to: localhost
