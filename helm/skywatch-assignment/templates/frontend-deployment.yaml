@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: skywatch-assignment-frontend }
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  selector: { matchLabels: { app: skywatch-assignment-frontend } }
+  template:
+    metadata: { labels: { app: skywatch-assignment-frontend } }
+    spec:
+      nodeSelector: {{ .Values.nodeSelector | toYaml | nindent 8 }}
+      containers:
+        - name: frontend
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          ports: [{ containerPort: 5000 }]
+          env: {{ include "skywatch-assignment.rabbitEnv" . | nindent 12 }}
+          readinessProbe: { httpGet: { path: /healthz, port: 5000 }, initialDelaySeconds: 5 }
+          resources: {{ .Values.frontend.resources | toYaml | nindent 12 }}
