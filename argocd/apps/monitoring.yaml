@@ -18,8 +18,4 @@ spec:
     server: https://kubernetes.default.svc
     namespace: monitoring
   syncPolicy:
-    automated: { prune: true, selfHeal: true }
     syncOptions: [ CreateNamespace=true ]
-    retry:
-      limit: 5
-      backoff: { duration: 15s, factor: 2, maxDuration: 3m }
