@@ -11,4 +11,6 @@
   gather_facts: false
   vars:
     kubeconfig_path: "{{ playbook_dir }}/../kubeconfig"
+  environment:
+    KUBECONFIG: "{{ playbook_dir }}/../kubeconfig"
   roles: [bootstrap]
