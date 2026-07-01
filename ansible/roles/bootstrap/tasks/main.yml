@@ -1,16 +1,4 @@
-# Copy kubeconfig to default location so all kubernetes.core modules find it
-- name: Ensure ~/.kube exists
-  ansible.builtin.file:
-    path: "~/.kube"
-    state: directory
-    mode: '0700'
-
-- name: Copy kubeconfig to ~/.kube/config
-  ansible.builtin.copy:
-    src: "{{ kubeconfig_path }}"
-    dest: "~/.kube/config"
-    mode: '0600'
-
+# kubeconfig already written to ~/.kube/config by k3s_master role
 - name: Install ArgoCD via Helm
   kubernetes.core.helm:
     kubeconfig: "{{ kubeconfig_path }}"

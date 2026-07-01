@@ -10,7 +10,5 @@
   connection: local
   gather_facts: false
   vars:
-    kubeconfig_path: "{{ playbook_dir }}/../kubeconfig"
-  environment:
-    KUBECONFIG: "{{ playbook_dir }}/../kubeconfig"
+    kubeconfig_path: "{{ lookup('env', 'HOME') }}/.kube/config"
   roles: [bootstrap]

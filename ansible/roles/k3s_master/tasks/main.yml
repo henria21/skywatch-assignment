@@ -28,15 +28,22 @@
   ansible.builtin.set_fact:
     k3s_token: "{{ k3s_token_b64.content | b64decode | trim }}"
 
-- name: Fetch kubeconfig to control machine
-  ansible.builtin.fetch:
+- name: Slurp kubeconfig from master
+  ansible.builtin.slurp:
     src: /etc/rancher/k3s/k3s.yaml
-    dest: "{{ playbook_dir }}/../kubeconfig"
-    flat: true
+  register: kubeconfig_raw
 
-- name: Rewrite kubeconfig server to public IP
-  ansible.builtin.replace:
-    path: "{{ playbook_dir }}/../kubeconfig"
-    regexp: 'https://(127\.0\.0\.1|localhost):6443'
-    replace: "https://{{ ansible_host }}:6443"
+- name: Ensure ~/.kube exists on controller
+  ansible.builtin.file:
+    path: "~/.kube"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+
+# Write directly to Linux-native ~/.kube/config — avoids WSL/NTFS write issues
+- name: Write kubeconfig with public IP to controller
+  ansible.builtin.copy:
+    content: "{{ kubeconfig_raw.content | b64decode | replace('https://127.0.0.1:6443', 'https://' + ansible_host + ':6443') | replace('https://localhost:6443', 'https://' + ansible_host + ':6443') }}"
+    dest: "~/.kube/config"
+    mode: '0600'
   delegate_to: localhost
