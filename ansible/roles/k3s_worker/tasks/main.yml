@@ -35,7 +35,7 @@
 - name: mkswap
   ansible.builtin.command: mkswap /swapfile
   register: mkswap_result
-  failed_when: mkswap_result.rc != 0 and 'already' not in mkswap_result.stderr
+  failed_when: mkswap_result.rc != 0 and 'already' not in mkswap_result.stderr and 'is mounted' not in mkswap_result.stderr
   changed_when: "'Setting up swapspace' in mkswap_result.stdout"
   when: node_role == "worker2"
 

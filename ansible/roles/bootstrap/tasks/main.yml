@@ -1,3 +1,16 @@
+# Copy kubeconfig to default location so all kubernetes.core modules find it
+- name: Ensure ~/.kube exists
+  ansible.builtin.file:
+    path: "{{ ansible_env.HOME }}/.kube"
+    state: directory
+    mode: '0700'
+
+- name: Copy kubeconfig to ~/.kube/config
+  ansible.builtin.copy:
+    src: "{{ kubeconfig_path }}"
+    dest: "{{ ansible_env.HOME }}/.kube/config"
+    mode: '0600'
+
 - name: Install ArgoCD via Helm
   kubernetes.core.helm:
     name: argocd
@@ -6,7 +19,6 @@
     chart_version: "7.*"
     release_namespace: argocd
     create_namespace: true
-    kubeconfig: "{{ kubeconfig_path }}"
     values:
       global:
         nodeSelector: { kubernetes.io/hostname: skywatch-worker }
@@ -22,7 +34,6 @@
     api_version: apiextensions.k8s.io/v1
     kind: CustomResourceDefinition
     name: applications.argoproj.io
-    kubeconfig: "{{ kubeconfig_path }}"
   register: appcrd
   until: appcrd.resources | length > 0
   retries: 30
@@ -31,7 +42,6 @@
 - name: Ensure skywatch-assignment namespace exists
   kubernetes.core.k8s:
     state: present
-    kubeconfig: "{{ kubeconfig_path }}"
     definition:
       apiVersion: v1
       kind: Namespace
@@ -40,7 +50,6 @@
 - name: Create the rabbitmq secret
   kubernetes.core.k8s:
     state: present
-    kubeconfig: "{{ kubeconfig_path }}"
     definition:
       apiVersion: v1
       kind: Secret
@@ -55,5 +64,4 @@
 - name: Apply the ArgoCD root application
   kubernetes.core.k8s:
     state: present
-    kubeconfig: "{{ kubeconfig_path }}"
     src: "{{ playbook_dir }}/../argocd/root-app.yaml"
