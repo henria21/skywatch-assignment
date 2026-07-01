@@ -1,21 +1,61 @@
-# kubeconfig already written to ~/.kube/config by k3s_master role
-- name: Install ArgoCD via Helm
-  kubernetes.core.helm:
+# Sanity-check: show what server URL is in the kubeconfig before touching the cluster
+- name: Check kubeconfig server URL
+  ansible.builtin.shell: grep -w server "$HOME/.kube/config" || echo "FILE NOT FOUND"
+  register: kube_server_line
+  changed_when: false
+
+- name: Show kubeconfig server (must be public IP, not localhost)
+  ansible.builtin.debug:
+    msg: "{{ kube_server_line.stdout }}"
+
+# Clear any non-deployed helm release and its stale namespace so pre-install hooks start clean
+- name: Check ArgoCD helm release status
+  ansible.builtin.shell: |
+    helm status argocd -n argocd --kubeconfig "$HOME/.kube/config" -o json 2>/dev/null \
+      | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['status'])" 2>/dev/null \
+      || echo "notfound"
+  register: argocd_helm_status
+  changed_when: false
+  failed_when: false
+
+# Only nuke on pending states — a failed release has partial resources already on the cluster;
+# letting helm upgrade those is far cheaper than a fresh install that can OOM the API server.
+- name: Uninstall and clean namespace only for pending states
+  ansible.builtin.shell: |
+    helm uninstall argocd -n argocd --kubeconfig "$HOME/.kube/config" 2>/dev/null || true
+  when: argocd_helm_status.stdout in ['pending-install', 'pending-upgrade', 'pending-rollback']
+  changed_when: false
+  failed_when: false
+
+- name: Delete stale argocd namespace only for pending states
+  kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
-    name: argocd
-    chart_ref: argo-cd
-    chart_repo_url: https://argoproj.github.io/argo-helm
-    chart_version: "7.*"
-    release_namespace: argocd
-    create_namespace: true
-    values:
-      global:
-        nodeSelector: { kubernetes.io/hostname: skywatch-worker }
-      server:
-        service:
-          type: NodePort
-          nodePortHttps: 30081
-    wait: true
+    state: absent
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: argocd
+  when: argocd_helm_status.stdout in ['pending-install', 'pending-upgrade', 'pending-rollback']
+  failed_when: false
+
+# No --wait: let helm just apply objects and return; CRD gate below handles readiness.
+# Longer timeout for the apply burst on a t3.micro API server.
+- name: Install ArgoCD via Helm
+  ansible.builtin.shell: |
+    helm upgrade --install argocd argo-cd \
+      --repo https://argoproj.github.io/argo-helm \
+      --namespace argocd \
+      --create-namespace \
+      --kubeconfig "$HOME/.kube/config" \
+      --set 'global.nodeSelector.kubernetes\.io/hostname=skywatch-worker' \
+      --set server.service.type=NodePort \
+      --set server.service.nodePortHttps=30081 \
+      --set dex.enabled=false \
+      --set notifications.enabled=false \
+      --timeout 15m0s
+  register: argocd_result
+  changed_when: "'has been upgraded' in argocd_result.stdout or 'has been deployed' in argocd_result.stdout"
 
 # GATE 1 — Application CRD must exist before we can apply the root Application
 - name: Wait for Application CRD established
@@ -25,9 +65,9 @@
     kind: CustomResourceDefinition
     name: applications.argoproj.io
   register: appcrd
-  until: appcrd.resources | length > 0
-  retries: 30
-  delay: 5
+  until: appcrd.resources is defined and appcrd.resources | length > 0
+  retries: 60
+  delay: 10
 
 - name: Ensure skywatch-assignment namespace exists
   kubernetes.core.k8s:

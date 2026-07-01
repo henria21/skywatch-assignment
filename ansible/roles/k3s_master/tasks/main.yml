@@ -15,6 +15,26 @@
         --node-taint node-role.kubernetes.io/control-plane=:NoSchedule
   when: k3s_status.stdout != "active"
 
+# Swap prevents K3s API server from being OOM-killed during heavy helm installs
+- name: Create 2G swapfile on master
+  ansible.builtin.command: fallocate -l 2G /swapfile
+  args: { creates: /swapfile }
+
+- name: Set swapfile permissions on master
+  ansible.builtin.file:
+    path: /swapfile
+    mode: '0600'
+
+- name: mkswap on master
+  ansible.builtin.command: mkswap /swapfile
+  register: mkswap_master
+  failed_when: mkswap_master.rc != 0 and 'already' not in mkswap_master.stderr and 'is mounted' not in mkswap_master.stderr
+  changed_when: "'Setting up swapspace' in mkswap_master.stdout"
+
+- name: swapon on master
+  ansible.builtin.shell: swapon /swapfile || true
+  changed_when: false
+
 - name: Wait for node-token
   ansible.builtin.wait_for:
     path: /var/lib/rancher/k3s/server/node-token
@@ -28,10 +48,15 @@
   ansible.builtin.set_fact:
     k3s_token: "{{ k3s_token_b64.content | b64decode | trim }}"
 
-- name: Slurp kubeconfig from master
-  ansible.builtin.slurp:
-    src: /etc/rancher/k3s/k3s.yaml
-  register: kubeconfig_raw
+# Rewrite server URL on the master using sed (no base64 / Jinja2 filter chain needed),
+# then ship the result to the controller as a plain file.
+- name: Generate kubeconfig with public server URL
+  ansible.builtin.shell: |
+    sed 's|https://127\.0\.0\.1:6443|https://{{ ansible_host }}:6443|g
+         s|https://localhost:6443|https://{{ ansible_host }}:6443|g' \
+      /etc/rancher/k3s/k3s.yaml
+  register: kubeconfig_rewritten
+  changed_when: false
 
 - name: Ensure ~/.kube exists on controller
   ansible.builtin.file:
@@ -39,11 +64,13 @@
     state: directory
     mode: '0700'
   delegate_to: localhost
+  become: false
 
-# Write directly to Linux-native ~/.kube/config — avoids WSL/NTFS write issues
-- name: Write kubeconfig with public IP to controller
+# become: false so ~ resolves to the ansible user home, not /root
+- name: Write kubeconfig to controller
   ansible.builtin.copy:
-    content: "{{ kubeconfig_raw.content | b64decode | replace('https://127.0.0.1:6443', 'https://' + ansible_host + ':6443') | replace('https://localhost:6443', 'https://' + ansible_host + ':6443') }}"
+    content: "{{ kubeconfig_rewritten.stdout }}"
     dest: "~/.kube/config"
     mode: '0600'
   delegate_to: localhost
+  become: false

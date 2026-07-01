@@ -19,6 +19,7 @@
     k3s kubectl label node skywatch-worker2 skywatch-role=app --overwrite
   delegate_to: "{{ groups['master'][0] }}"
   when: node_role == "worker2"
+  ignore_errors: true
 
 # Swap for worker2 only — gives monitoring headroom on a 1 GiB node
 - name: Create 2G swapfile
