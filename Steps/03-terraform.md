@@ -1,16 +1,15 @@
 # 03 — Terraform (AWS infrastructure)
 
-**Goal:** three t3.micro EC2 nodes + security group, with the Ansible inventory written
+**Goal:** three t3.small EC2 nodes + security group, with the Ansible inventory written
 automatically.
 **Prereqts:** AWS account, AWS CLI configured, an EC2 key pair `skywatch-key` with the private key at
 `~/.ssh/skywatch-key.pem`.
 **Done when:** `terraform apply` brings up 3 instances and writes `../ansible/inventory.ini`; all 3
 are reachable over SSH.
 
-> **Free-tier reality:** t3.micro is free-tier eligible (750 hrs/month, first 12 months, new
-> accounts). 3 nodes × ~10 h = 30 instance-hours per session — well within 750. **Destroy after
-> every session.** Per-node type is a variable so you *could* bump one node later, but default is
-> micro everywhere to stay free.
+> **Cost note:** t3.small is ~$0.023/hr per node. 3 nodes × ~10 h/session ≈ $0.69/session.
+> **Destroy after every session** (`terraform destroy`). t3.micro OOMs under kube-prometheus-stack
+> load; t3.small (2 GiB RAM) is the minimum viable size for this stack.
 
 ---
 
@@ -44,9 +43,9 @@ variable "ssh_private_key_path" { default = "~/.ssh/skywatch-key.pem" }
 variable "instance_types" {
   type = map(string)
   default = {
-    master   = "t3.micro"
-    worker   = "t3.micro"
-    worker2  = "t3.micro"
+    master   = "t3.small"
+    worker   = "t3.small"
+    worker2  = "t3.small"
   }
 }
 

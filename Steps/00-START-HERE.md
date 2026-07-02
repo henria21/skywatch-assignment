@@ -5,9 +5,9 @@ ends with a **Done when** gate, and must pass that gate before you move to the n
 
 > **For the AI coding assistant executing this:** Do **one file at a time**. Do **not** re-open
 > or re-litigate any decision in the "Locked decisions" table below — they were debated and
-> settled deliberately. If a file says `emptyDir`, do not "improve" it to a PVC. If it says
-> `t3.micro`, do not upgrade it. When a step is ambiguous, prefer the **simplest correct** option
-> and leave a `# TODO(human):` comment rather than inventing new architecture.
+> settled deliberately. If a file says `emptyDir`, do not "improve" it to a PVC. When a step is
+> ambiguous, prefer the **simplest correct** option and leave a `# TODO(human):` comment rather
+> than inventing new architecture.
 
 ---
 
@@ -47,7 +47,7 @@ resource exists. Never debug the message round-trip and K3s networking at the sa
 
 | Decision | Value | Why (one line) |
 |---|---|---|
-| Instance type | **t3.micro × 3** | Free-tier eligible; 2 vCPU + unlimited burst beats t2.micro for $0 |
+| Instance type | **t3.small × 3** | 2 GiB RAM needed for ArgoCD + kube-prometheus-stack; t3.micro OOMs under monitoring load |
 | App language | **Python (Flask + plain worker)** | Language is incidental for a DevOps course; keep as assignment specifies |
 | Frontend↔worker pattern | **RabbitMQ RPC** (reply_to + correlation_id) | Weather query is request/response; RPC carries the answer back |
 | Reply queue | **Exclusive, auto-named, per request** | Collision-proof, self-cleaning; no sticky sessions needed |
@@ -83,7 +83,7 @@ resource exists. Never debug the message round-trip and K3s networking at the sa
 - **GitHub owner / repo:** `henria21/skywatch-assignment`. Images: `ghcr.io/henria21/skywatch-assignment-frontend`,
   `ghcr.io/henria21/skywatch-assignment-worker`.
 - **Namespaces:** app in `skywatch-assignment`, ArgoCD in `argocd`, monitoring in `monitoring`.
-- **NodePorts:** frontend `30080`, ArgoCD `30081`, Grafana `30030`.
+- **NodePorts:** frontend `30080`, ArgoCD HTTP `30082` / HTTPS `30083`, Grafana `30090`.
 - **Region:** `eu-west-1`. **K3s:** pinned `v1.29.5+k3s1`.
 - **GHCR images are PUBLIC** → no `imagePullSecret` needed. (If you make them private, you must add
   one; the chart does not include it. Keep them public to avoid that.)
