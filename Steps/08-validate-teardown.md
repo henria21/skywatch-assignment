@@ -37,7 +37,8 @@ until kubectl get applications -n argocd 2>/dev/null | grep "^monitoring" | grep
 #    App:     http://<worker2-public-ip>:30080
 #    Grafana: http://<worker2-public-ip>:30090  (admin / admin)
 
-# 8. Pre-destroy sanity check — confirm everything is green before destroying
+# 8. Pre-destroy sanity check — wait for Grafana then confirm everything is green
+until kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana 2>/dev/null | grep -q "3/3.*Running"; do echo "$(date +%H:%M:%S) waiting for Grafana..."; sleep 10; done && echo "Grafana ready"
 kubectl get applications -n argocd
 kubectl get pods -n skywatch-assignment
 kubectl get pods -n monitoring
