@@ -50,6 +50,9 @@ spec:
               cpu: 200m
               memory: 256Mi
           adminPassword: admin
+          service:
+            type: NodePort
+            nodePort: 30090
         kube-state-metrics:
           resources:
             requests:
