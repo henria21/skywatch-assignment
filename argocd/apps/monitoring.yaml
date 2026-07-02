@@ -53,6 +53,33 @@ spec:
           service:
             type: NodePort
             nodePort: 30090
+          dashboardProviders:
+            dashboardproviders.yaml:
+              apiVersion: 1
+              providers:
+                - name: default
+                  folder: ''
+                  type: file
+                  options:
+                    path: /var/lib/grafana/dashboards/default
+          dashboards:
+            default:
+              rabbitmq-overview:
+                gnetId: 10991
+                revision: 9
+                datasource: Prometheus
+              node-exporter-full:
+                gnetId: 1860
+                revision: 37
+                datasource: Prometheus
+              kubernetes-pods:
+                gnetId: 15760
+                revision: 29
+                datasource: Prometheus
+              kubernetes-cluster:
+                gnetId: 7249
+                revision: 1
+                datasource: Prometheus
         kube-state-metrics:
           resources:
             requests:
