@@ -1,7 +1,7 @@
 frontend:
   image: {repository: ghcr.io/henria21/skywatch-assignment-frontend, tag: aff734f}
   replicas: 2
-  nodePort: 30080
+  nodePort: 30090
   resources:
     requests: {cpu: 50m, memory: 64Mi}
     limits: {cpu: 250m, memory: 128Mi}

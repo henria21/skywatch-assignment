@@ -50,7 +50,8 @@
       --kubeconfig "$HOME/.kube/config" \
       --set 'global.nodeSelector.kubernetes\.io/hostname=skywatch-worker' \
       --set server.service.type=NodePort \
-      --set server.service.nodePortHttps=30081 \
+      --set server.service.nodePortHttp=30082 \
+      --set server.service.nodePortHttps=30083 \
       --set dex.enabled=false \
       --set notifications.enabled=false \
       --timeout 15m0s
