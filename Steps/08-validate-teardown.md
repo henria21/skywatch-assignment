@@ -19,7 +19,7 @@ cd ../ansible && ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass
 export KUBECONFIG=$(pwd)/../kubeconfig
 
 # 3. Wait for CRDs and app (auto-synced by ArgoCD):
-kubectl wait --for=condition=Established customresourcedefinitions/servicemonitors.monitoring.coreos.com --timeout=180s
+until kubectl get crd servicemonitors.monitoring.coreos.com &>/dev/null; do echo "$(date +%H:%M:%S) waiting for CRDs..."; sleep 10; done && echo "CRDs ready"
 kubectl -n skywatch-assignment rollout status deploy/skywatch-assignment-frontend --timeout=180s
 
 # 4. Generate clickable links (reads inventory.ini + fetches ArgoCD password automatically)
