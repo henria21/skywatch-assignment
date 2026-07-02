@@ -16,5 +16,4 @@ spec:
     namespace: monitoring
   syncPolicy:
     syncOptions:
-      - ServerSideApply=true
       - CreateNamespace=true
