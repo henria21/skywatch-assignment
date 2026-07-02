@@ -18,17 +18,36 @@ cd terraform && terraform apply -auto-approve
 cd ../ansible && ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass
 export KUBECONFIG=$(pwd)/../kubeconfig
 
-# 3. Let ArgoCD reconcile (wave 0 CRDs -> wave 1 app+monitoring). Watch, don't sleep:
-kubectl wait --for=condition=Established crd/servicemonitors.monitoring.coreos.com --timeout=180s
-kubectl -n skywatch rollout status deploy/skywatch-frontend --timeout=180s
-kubectl -n monitoring rollout status statefulset/prometheus-kube-prometheus-stack-prometheus --timeout=240s
+# 3. Wait for CRDs and app (auto-synced by ArgoCD):
+kubectl wait --for=condition=Established customresourcedefinitions/servicemonitors.monitoring.coreos.com --timeout=180s
+kubectl -n skywatch-assignment rollout status deploy/skywatch-assignment-frontend --timeout=180s
 
-# 4. Use it
+# 4. Generate clickable links (reads inventory.ini + fetches ArgoCD password automatically)
+cd .. && bash show-links.sh
+#    Opens links.html in browser with current IPs for Frontend, ArgoCD, Grafana
+cd ansible
+
+# 5. Open ArgoCD UI and sync 'monitoring' manually (auto-sync disabled to prevent API hammering)
+#    Click monitoring → Sync → Synchronize
+
+# 6. Wait for monitoring pods to come up (~5-10 min):
+until kubectl get applications -n argocd 2>/dev/null | grep "^monitoring" | grep -q "Synced.*Healthy"; do echo "$(date +%H:%M:%S) waiting..."; sleep 10; done && echo "monitoring ready"
+
+# 7. Use it
 #    App:     http://<worker2-public-ip>:30080
-#    ArgoCD:  http://<worker1-public-ip>:30082
-#    Grafana: http://<worker2-public-ip>:30090
+#    Grafana: http://<worker2-public-ip>:30090  (admin / admin)
 
-# 5. Teardown (stay in free tier)
+# 8. Pre-destroy sanity check — confirm everything is green before destroying
+kubectl get applications -n argocd
+kubectl get pods -n skywatch-assignment
+kubectl get pods -n monitoring
+#   All 4 apps: Synced + Healthy
+#   All 5 app pods: Running
+#   All monitoring pods: Running
+#   Frontend works:  http://<worker2-public-ip>:30080
+#   Grafana works:   http://<worker2-public-ip>:30090
+
+# 9. Teardown (stay in free tier)
 cd ../terraform && terraform destroy -auto-approve
 ```
 
