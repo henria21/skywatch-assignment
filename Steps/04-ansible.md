@@ -6,7 +6,7 @@ idempotent, all in the right order.
 **Prereqts:** file 03 applied (`inventory.ini` exists); `kubernetes.core` + `community.general`
 collections; an ansible-vault file holding the RabbitMQ credentials.
 **Done when:** `kubectl get nodes` shows 3 Ready nodes from your laptop, ArgoCD is up on NodePort
-30081, the `skywatch-rabbitmq` secret exists, and the root Application is applied. Re-running the
+30082 (HTTP) / 30083 (HTTPS), the `skywatch-rabbitmq` secret exists, and the root Application is applied. Re-running the
 playbook changes nothing.
 
 This file is where the **bootstrap ordering** (decided earlier) becomes structural instead of
@@ -168,7 +168,8 @@ This is the ordered bootstrap. **Order matters and is enforced by task order**, 
       server:
         service:
           type: NodePort
-          nodePortHttps: 30081
+          nodePortHttp: 30082
+          nodePortHttps: 30083
     wait: true
 
 # GATE 1 — Application CRD must exist before we can apply a root Application
@@ -244,7 +245,7 @@ ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass
 
 - `kubectl get nodes` → 3 nodes Ready (`skywatch-master` tainted, no app pods on it).
 - `kubectl get secret skywatch-rabbitmq -n skywatch` exists with the 4 keys.
-- ArgoCD reachable: `https://<master-public-ip>:30081` (admin password from
+- ArgoCD reachable: `http://<worker1-public-ip>:30082` (admin password from
   `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d`).
 - Re-run the whole playbook → every task reports **ok**, nothing **changed** (idempotent).
 - ArgoCD will report the root app missing children until files 05–07 exist in Git — that's expected.

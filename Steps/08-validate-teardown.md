@@ -25,8 +25,8 @@ kubectl -n monitoring rollout status statefulset/prometheus-kube-prometheus-stac
 
 # 4. Use it
 #    App:     http://<worker2-public-ip>:30080
-#    ArgoCD:  https://<master-public-ip>:30081
-#    Grafana: http://<worker2-public-ip>:30030
+#    ArgoCD:  http://<worker1-public-ip>:30082
+#    Grafana: http://<worker2-public-ip>:30090
 
 # 5. Teardown (stay in free tier)
 cd ../terraform && terraform destroy -auto-approve
