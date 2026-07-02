@@ -6,9 +6,9 @@ variable "ssh_private_key_path" { default = "~/.ssh/skywatch-key.pem" }
 variable "instance_types" {
   type = map(string)
   default = {
-    master   = "t3.micro"
+    master   = "t3.small"
     worker   = "t3.micro"
-    worker2  = "t3.micro"
+    worker2  = "t3.small"
   }
 }
 
