@@ -7,7 +7,7 @@ variable "instance_types" {
   type = map(string)
   default = {
     master   = "t3.small"
-    worker   = "t3.micro"
+    worker   = "t3.small"
     worker2  = "t3.small"
   }
 }
