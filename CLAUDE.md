@@ -37,7 +37,7 @@ cd terraform && terraform destroy
 
 ## App pods
 All 5 pods run on `skywatch-worker2` via nodeSelector (`kubernetes.io/hostname: skywatch-worker2`):
-- frontend ×2 (NodePort 30080)
+- frontend ×2 (NodePort 30080) — ArgoCD uses 30082/30083
 - worker ×2 (connects to RabbitMQ)
 - rabbitmq ×1
 
