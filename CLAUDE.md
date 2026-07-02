@@ -2,12 +2,12 @@
 
 ## What this is
 DevOps course assignment: a weather-query pipeline deployed via full GitOps on AWS K3s.
-3× t3.micro EC2 instances (master + worker1 + worker2). Extremely resource-constrained.
+3× t3.small EC2 instances (master + worker1 + worker2). Resource-constrained.
 
 ## Cluster architecture
-- **master** (skywatch-master): K3s server + etcd. 2G swap added for stability.
-- **worker1** (skywatch-worker): K3s agent. Runs ArgoCD pods.
-- **worker2** (skywatch-worker2): K3s agent. Runs all app pods (nodeSelector enforced).
+- **master** (skywatch-master): t3.small. K3s server + etcd. 2G swap added for stability.
+- **worker1** (skywatch-worker): t3.small. Runs ArgoCD pods + monitoring stack.
+- **worker2** (skywatch-worker2): t3.small. Runs all app pods (nodeSelector enforced).
 
 ## To spin up the cluster
 ```bash
@@ -29,27 +29,34 @@ cd terraform && terraform destroy
 ## GHCR images must remain PUBLIC — no imagePullSecret in the Helm chart
 
 ## Known issues / constraints
-- t3.micro has 1 GiB RAM — K3s crashes under heavy load. Swap helps but doesn't eliminate it.
-- `prometheus-operator-crds` with `ServerSideApply=true` crashes the API server. **ServerSideApply is disabled** in `argocd/apps/prometheus-crds.yaml`.
+- `prometheus-operator-crds` with `ServerSideApply=true` crashes the API server on small clusters. **ServerSideApply is disabled** in `argocd/apps/prometheus-crds.yaml`.
 - ArgoCD auto-sync is disabled on `monitoring` and `prometheus-crds` apps to prevent constant API hammering.
 - `skywatch-worker2` is a Kubernetes node hostname — do NOT rename it.
 - The ansible `.vault_pass` file must live on the Linux filesystem (not `/mnt/c/`) due to WSL/NTFS permission issues. Use `--ask-vault-pass` or `~/vault_pass`.
+- Always `git pull --rebase` before `git push` — CI creates tag-bump commits between pushes.
 
 ## App pods
 All 5 pods run on `skywatch-worker2` via nodeSelector (`kubernetes.io/hostname: skywatch-worker2`):
-- frontend ×2 (NodePort 30080) — ArgoCD uses 30082/30083
+- frontend ×2 (NodePort **30080**)
 - worker ×2 (connects to RabbitMQ)
 - rabbitmq ×1
 
 Workers crash on startup until RabbitMQ is ready — this is normal, they recover.
 
+## Monitoring (kube-prometheus-stack on worker2)
+- Grafana: NodePort **30090** — login `admin` / `admin`
+- Prometheus: ClusterIP only (9090)
+- Alertmanager: ClusterIP only (9093)
+- `monitoring` app auto-sync is disabled in git; sync manually from ArgoCD UI when needed
+
+## ArgoCD
+- HTTP NodePort **30082**, HTTPS **30083** (on worker1)
+- Dex and notifications disabled to save RAM
+
 ## After fresh cluster — manual steps needed
-1. Enable auto-sync on `prometheus-crds` once (to install CRDs), then it self-manages
-2. Trigger manual sync of `skywatch-assignment` if it's in backoff after 5 failed retries:
-   ```bash
-   kubectl patch application skywatch-assignment -n argocd --type merge \
-     -p '{"operation":{"initiatedBy":{"username":"kubectl"},"sync":{"revision":"HEAD"}}}'
-   ```
+1. `prometheus-crds` has auto-sync enabled — CRDs install automatically on first sync
+2. Trigger manual sync of `skywatch-assignment` via ArgoCD UI if it's stuck in backoff
+3. Sync `monitoring` manually from ArgoCD UI (auto-sync disabled to prevent API hammering)
 
 ## GitOps loop
 Push to `main` → GitHub Actions bumps image tag in `values.yaml` → ArgoCD auto-deploys within ~3 min.
