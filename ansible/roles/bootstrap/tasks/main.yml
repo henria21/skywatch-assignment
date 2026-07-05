@@ -55,6 +55,10 @@
       --set server.service.nodePortHttps=30083 \
       --set dex.enabled=false \
       --set notifications.enabled=false \
+      --set repoServer.resources.requests.cpu=100m \
+      --set repoServer.resources.requests.memory=256Mi \
+      --set repoServer.resources.limits.cpu=500m \
+      --set repoServer.resources.limits.memory=768Mi \
       --timeout 15m0s
   register: argocd_result
   changed_when: "'has been upgraded' in argocd_result.stdout or 'has been deployed' in argocd_result.stdout"

@@ -141,11 +141,11 @@ spec:
 - The monitoring chart would normally install its own CRDs in a big bang that times out the 1 GiB
   API server. `skipCrds: true` + a dedicated wave-0 CRD app with ServerSideApply + retry solves both.
 
-## The watch-this failure mode on 1 GiB
+## The watch-this failure mode on a resource-constrained node
 `argocd-repo-server` (pinned to worker1) runs `helm template` to render kube-prometheus-stack, which
 is a **large** chart. If repo-server OOMs mid-render you get a cryptic `comparison failed` with no
-obvious cause. Give repo-server a memory request/limit in the ArgoCD Helm values (file 04) and check
-there first if monitoring won't sync.
+obvious cause. `repoServer.resources` is now set in the ArgoCD Helm values (file 04:
+100m/256Mi request, 500m/768Mi limit) — check there first if monitoring won't sync.
 
 ## Done when
 

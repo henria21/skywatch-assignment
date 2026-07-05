@@ -170,6 +170,10 @@ This is the ordered bootstrap. **Order matters and is enforced by task order**, 
           type: NodePort
           nodePortHttp: 30082
           nodePortHttps: 30083
+      repoServer:
+        resources:                       # renders the large kube-prometheus-stack chart (file 06) — cap it, don't let it OOM
+          requests: { cpu: 100m, memory: 256Mi }
+          limits:   { cpu: 500m, memory: 768Mi }
     wait: true
 
 # GATE 1 — Application CRD must exist before we can apply a root Application

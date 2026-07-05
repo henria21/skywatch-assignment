@@ -53,3 +53,22 @@ deliberate rather than as documentation drift.
 - `Steps/05-helm-skywatch.md` showed the nodeSelector value as `skywatch-assignment-worker2`; the
   actual hostname (set by Ansible, `--node-name skywatch-{{ node_role }}`) and the real
   `helm/skywatch-assignment/values.yaml` both use `skywatch-worker2`. Corrected in the Steps doc.
+
+## `monitoring` auto-sync disabled — investigated, not re-enabled
+
+Git history (`bf87156`, `7f9a7d5`, `7702fe3`, all 2026-07-01/02) shows this toggled three times
+while **worker1 was still t3.micro**: disabled once with zero resource limits on the chart,
+briefly re-enabled with still-zero limits, then disabled again in the *same commit* that finally
+added the slim per-component resource limits. Worker1 wasn't upgraded to t3.small until
+`24f34b9`, two hours after the last disable — auto-sync was never retested after that RAM bump.
+
+So the original constraint (worker1 hosting both the ArgoCD control plane and the monitoring
+pods on 1GB) is plausibly resolved by the t3.small upgrade, but this was never verified live.
+One contributing risk Steps/06 itself flagged was still open until this session: `argocd-repo-server`
+had no explicit memory request/limit, despite rendering the large kube-prometheus-stack chart on
+every reconcile. **Fixed:** added `repoServer.resources` (100m/256Mi request, 500m/768Mi limit) to
+the ArgoCD Helm install in `ansible/roles/bootstrap/tasks/main.yml` and documented it in
+`Steps/04-ansible.md` and `Steps/06-argocd-app-of-apps.md`.
+
+Auto-sync on `monitoring` itself is left **disabled** — re-enabling it should only happen after a
+live test on a real cluster, which needs a `terraform apply` run to verify.
