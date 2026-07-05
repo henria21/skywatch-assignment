@@ -74,3 +74,14 @@
     mode: '0600'
   delegate_to: localhost
   become: false
+
+# Steps/08's quick-start does `export KUBECONFIG=$(pwd)/../kubeconfig` from ansible/, and
+# .gitignore already expects a repo-root `kubeconfig` file — write it here too, or every run
+# leaves that file stale (or missing) and pointed at a destroyed cluster.
+- name: Write kubeconfig to repo root (for the Steps/08 quick-start)
+  ansible.builtin.copy:
+    content: "{{ kubeconfig_rewritten.stdout }}"
+    dest: "{{ playbook_dir }}/../kubeconfig"
+    mode: '0600'
+  delegate_to: localhost
+  become: false
