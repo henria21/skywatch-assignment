@@ -30,7 +30,7 @@ cd terraform && terraform destroy
 
 ## Known issues / constraints
 - `prometheus-operator-crds` CRDs exceed the client-side last-applied annotation limit (`metadata.annotations: Too long`) without server-side apply. **`ServerSideApply=true` is enabled** (mandatory) in `argocd/apps/prometheus-crds.yaml`; auto-sync (prune+selfHeal) stays on for this app so CRDs install automatically on first sync.
-- ArgoCD auto-sync is disabled only on the `monitoring` app (no `automated:` block in `argocd/apps/monitoring.yaml`) to prevent constant API hammering — sync it manually from the ArgoCD UI.
+- `monitoring` app auto-sync was disabled historically (t3.micro-era API hammering concern); re-enabled 2026-07-05 after live-testing on t3.small with `repoServer.resources` capped — repo-server and application-controller both held stable (no restarts, low CPU/memory) for 18+ min under selfHeal. See `Spec/differences-from-current-repo.md`.
 - `skywatch-worker2` is a Kubernetes node hostname — do NOT rename it.
 - The ansible `.vault_pass` file must live on the Linux filesystem (not `/mnt/c/`) due to WSL/NTFS permission issues. Use `--ask-vault-pass` or `~/vault_pass`.
 - Always `git pull --rebase` before `git push` — CI creates tag-bump commits between pushes.
@@ -47,7 +47,7 @@ Workers crash on startup until RabbitMQ is ready — this is normal, they recove
 - Grafana: NodePort **30030** — login `admin` / `admin`
 - Prometheus: ClusterIP only (9090)
 - Alertmanager: ClusterIP only (9093)
-- `monitoring` app auto-sync is disabled in git; sync manually from ArgoCD UI when needed
+- `monitoring` app auto-sync is enabled (prune+selfHeal) — verified stable on t3.small, see above
 
 ## ArgoCD
 - HTTP NodePort **30082**, HTTPS **30083** (on worker1)
@@ -56,7 +56,9 @@ Workers crash on startup until RabbitMQ is ready — this is normal, they recove
 ## After fresh cluster — manual steps needed
 1. `prometheus-crds` has auto-sync enabled — CRDs install automatically on first sync
 2. Trigger manual sync of `skywatch-assignment` via ArgoCD UI if it's stuck in backoff
-3. Sync `monitoring` manually from ArgoCD UI (auto-sync disabled to prevent API hammering)
+3. `monitoring` also auto-syncs now — if `skywatch-root` shows `Unknown` sync status right after
+   bootstrap (application-controller raced repo-server on startup), force a refresh:
+   `kubectl patch application skywatch-root -n argocd --type merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}'`
 
 ## GitOps loop
 Push to `main` → GitHub Actions bumps image tag in `values.yaml` → ArgoCD auto-deploys within ~3 min.

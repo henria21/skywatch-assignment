@@ -54,7 +54,7 @@ deliberate rather than as documentation drift.
   actual hostname (set by Ansible, `--node-name skywatch-{{ node_role }}`) and the real
   `helm/skywatch-assignment/values.yaml` both use `skywatch-worker2`. Corrected in the Steps doc.
 
-## `monitoring` auto-sync disabled — investigated, not re-enabled
+## `monitoring` auto-sync — investigated and re-enabled (verified live 2026-07-05)
 
 Git history (`bf87156`, `7f9a7d5`, `7702fe3`, all 2026-07-01/02) shows this toggled three times
 while **worker1 was still t3.micro**: disabled once with zero resource limits on the chart,
@@ -70,5 +70,23 @@ every reconcile. **Fixed:** added `repoServer.resources` (100m/256Mi request, 50
 the ArgoCD Helm install in `ansible/roles/bootstrap/tasks/main.yml` and documented it in
 `Steps/04-ansible.md` and `Steps/06-argocd-app-of-apps.md`.
 
-Auto-sync on `monitoring` itself is left **disabled** — re-enabling it should only happen after a
-live test on a real cluster, which needs a `terraform apply` run to verify.
+**Live test result (2026-07-05, real cluster via `terraform apply` + `ansible-playbook`):** enabled
+`automated: { prune: true, selfHeal: true }` on `monitoring` via the ArgoCD UI first (no git change,
+fully reversible), then observed for 18+ minutes:
+- `argocd-repo-server`: 0 restarts, ~50Mi memory (limit is 768Mi)
+- `argocd-application-controller` (runs the selfHeal reconcile loop — the actual "API hammering"
+  concern): 9m CPU, 387Mi memory, 0 restarts
+- Node memory (`kubectl top node`): 61-69% across all three t3.small nodes, no pressure
+- `monitoring` Application stayed `Synced`/`Healthy` throughout, no flapping
+
+No evidence of the original hammering/OOM behavior. Made permanent: `automated: { prune: true,
+selfHeal: true }` added back to `argocd/apps/monitoring.yaml` in git, `CLAUDE.md` and `Steps/08`
+updated to match.
+
+One unrelated issue surfaced during this test and is worth documenting for future fresh-cluster
+runs: right after `ansible-playbook` finishes, `skywatch-root` can sit at `Unknown` sync status
+because `argocd-application-controller` starts querying `argocd-repo-server` a few seconds before
+repo-server's Service endpoints are ready (`connection refused` on a single comparison attempt,
+never auto-retried). Fix is a hard refresh:
+`kubectl patch application skywatch-root -n argocd --type merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}'`.
+Not yet turned into an Ansible readiness gate — worth doing if it recurs on future fresh clusters.

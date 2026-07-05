@@ -21,14 +21,17 @@ export KUBECONFIG=$(pwd)/../kubeconfig
 # 3. Wait for CRDs and app (auto-synced by ArgoCD):
 until kubectl get crd servicemonitors.monitoring.coreos.com &>/dev/null; do echo "$(date +%H:%M:%S) waiting for CRDs..."; sleep 10; done && echo "CRDs ready"
 kubectl -n skywatch-assignment rollout status deploy/skywatch-assignment-frontend --timeout=180s
+#    If skywatch-root sits at "Unknown" sync status right after bootstrap, application-controller
+#    raced repo-server on startup — force a refresh:
+#    kubectl patch application skywatch-root -n argocd --type merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}'
 
 # 4. Generate clickable links (reads inventory.ini + fetches ArgoCD password automatically)
 cd .. && bash show-links.sh
 #    Opens links.html in browser with current IPs for Frontend, ArgoCD, Grafana
 cd ansible
 
-# 5. Open ArgoCD UI and sync 'monitoring' manually (auto-sync disabled to prevent API hammering)
-#    Click monitoring → Sync → Synchronize
+# 5. monitoring now auto-syncs too (verified stable on t3.small, see Spec/differences-from-current-repo.md)
+#    — no manual sync needed, just wait for it below
 
 # 6. Wait for monitoring pods to come up (~5-10 min):
 until kubectl get applications -n argocd 2>/dev/null | grep "^monitoring" | grep -q "Synced.*Healthy"; do echo "$(date +%H:%M:%S) waiting..."; sleep 10; done && echo "monitoring ready"
