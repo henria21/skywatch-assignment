@@ -1,9 +1,9 @@
 # 07 — Observability (Prometheus + Grafana)
 
 **Goal:** kube-prometheus-stack running slim on t3.small nodes, Prometheus on **emptyDir**, Grafana
-on NodePort 30090, and RabbitMQ metrics scraped via the ServiceMonitor from file 05.
+on NodePort 30030, and RabbitMQ metrics scraped via the ServiceMonitor from file 05.
 **Prereqts:** file 06 (the `monitoring` child app + wave-0 CRDs).
-**Done when:** Grafana loads at `http://<worker2-ip>:30090`, and a dashboard shows RabbitMQ queue
+**Done when:** Grafana loads at `http://<worker2-ip>:30030`, and a dashboard shows RabbitMQ queue
 depth and node memory.
 
 This is delivered **through ArgoCD** (the `monitoring` child app), not by a manual `helm install`.
@@ -36,7 +36,7 @@ prometheusOperator:
 grafana:
   service:
     type: NodePort
-    nodePort: 30090
+    nodePort: 30030
   adminPassword: admin
   resources:
     requests: { cpu: 50m, memory: 128Mi }
@@ -81,6 +81,6 @@ The Service (file 05) names that port `prometheus`. The ServiceMonitor (file 05)
 kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
 #   open :9090/targets -> skywatch-rabbitmq target is UP
 # Grafana
-#   http://<worker2-public-ip>:30090  (admin / admin)
+#   http://<worker2-public-ip>:30030  (admin / admin)
 #   import 10991 -> queue depth changes as you submit cities through the app
 ```

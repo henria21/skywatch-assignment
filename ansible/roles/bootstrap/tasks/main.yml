@@ -45,6 +45,7 @@
   ansible.builtin.shell: |
     helm upgrade --install argocd argo-cd \
       --repo https://argoproj.github.io/argo-helm \
+      --version 7.3.11 \
       --namespace argocd \
       --create-namespace \
       --kubeconfig "$HOME/.kube/config" \

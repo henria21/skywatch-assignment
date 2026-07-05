@@ -83,7 +83,7 @@ resource exists. Never debug the message round-trip and K3s networking at the sa
 - **GitHub owner / repo:** `henria21/skywatch-assignment`. Images: `ghcr.io/henria21/skywatch-assignment-frontend`,
   `ghcr.io/henria21/skywatch-assignment-worker`.
 - **Namespaces:** app in `skywatch-assignment`, ArgoCD in `argocd`, monitoring in `monitoring`.
-- **NodePorts:** frontend `30080`, ArgoCD HTTP `30082` / HTTPS `30083`, Grafana `30090`.
+- **NodePorts:** frontend `30080`, ArgoCD HTTP `30082` / HTTPS `30083`, Grafana `30030`.
 - **Region:** `eu-west-1`. **K3s:** pinned `v1.29.5+k3s1`.
 - **GHCR images are PUBLIC** → no `imagePullSecret` needed. (If you make them private, you must add
   one; the chart does not include it. Keep them public to avoid that.)

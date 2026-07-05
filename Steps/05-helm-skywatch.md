@@ -69,7 +69,7 @@ rabbitmq:
 
 # Pin the whole app to worker2
 nodeSelector:
-  kubernetes.io/hostname: skywatch-assignment-worker2
+  kubernetes.io/hostname: skywatch-worker2
 
 secretName: skywatch-assignment-rabbitmq
 rabbitmqHost: skywatch-assignment-rabbitmq   # = the ClusterIP Service name

@@ -64,7 +64,7 @@ spec:
   source:
     repoURL: https://prometheus-community.github.io/helm-charts
     chart: prometheus-operator-crds
-    targetRevision: "*"          # pin to a real version in practice
+    targetRevision: "30.0.1"
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
@@ -117,7 +117,7 @@ spec:
   source:
     repoURL: https://prometheus-community.github.io/helm-charts
     chart: kube-prometheus-stack
-    targetRevision: "*"          # pin in practice
+    targetRevision: "87.10.1"
     helm:
       skipCrds: true             # CRDs already applied by wave 0
       valueFiles: []             # inline values OR reference helm/monitoring/values.yaml (file 07)

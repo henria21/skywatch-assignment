@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://prometheus-community.github.io/helm-charts
     chart: kube-prometheus-stack
-    targetRevision: "*"
+    targetRevision: "87.10.1"
     helm:
       skipCrds: true
       values: |
@@ -52,7 +52,7 @@ spec:
           adminPassword: admin
           service:
             type: NodePort
-            nodePort: 30090
+            nodePort: 30030
           dashboardProviders:
             dashboardproviders.yaml:
               apiVersion: 1

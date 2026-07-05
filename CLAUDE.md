@@ -29,8 +29,8 @@ cd terraform && terraform destroy
 ## GHCR images must remain PUBLIC — no imagePullSecret in the Helm chart
 
 ## Known issues / constraints
-- `prometheus-operator-crds` with `ServerSideApply=true` crashes the API server on small clusters. **ServerSideApply is disabled** in `argocd/apps/prometheus-crds.yaml`.
-- ArgoCD auto-sync is disabled on `monitoring` and `prometheus-crds` apps to prevent constant API hammering.
+- `prometheus-operator-crds` CRDs exceed the client-side last-applied annotation limit (`metadata.annotations: Too long`) without server-side apply. **`ServerSideApply=true` is enabled** (mandatory) in `argocd/apps/prometheus-crds.yaml`; auto-sync (prune+selfHeal) stays on for this app so CRDs install automatically on first sync.
+- ArgoCD auto-sync is disabled only on the `monitoring` app (no `automated:` block in `argocd/apps/monitoring.yaml`) to prevent constant API hammering — sync it manually from the ArgoCD UI.
 - `skywatch-worker2` is a Kubernetes node hostname — do NOT rename it.
 - The ansible `.vault_pass` file must live on the Linux filesystem (not `/mnt/c/`) due to WSL/NTFS permission issues. Use `--ask-vault-pass` or `~/vault_pass`.
 - Always `git pull --rebase` before `git push` — CI creates tag-bump commits between pushes.
@@ -44,7 +44,7 @@ All 5 pods run on `skywatch-worker2` via nodeSelector (`kubernetes.io/hostname: 
 Workers crash on startup until RabbitMQ is ready — this is normal, they recover.
 
 ## Monitoring (kube-prometheus-stack on worker2)
-- Grafana: NodePort **30090** — login `admin` / `admin`
+- Grafana: NodePort **30030** — login `admin` / `admin`
 - Prometheus: ClusterIP only (9090)
 - Alertmanager: ClusterIP only (9093)
 - `monitoring` app auto-sync is disabled in git; sync manually from ArgoCD UI when needed

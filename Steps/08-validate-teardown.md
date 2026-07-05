@@ -35,7 +35,7 @@ until kubectl get applications -n argocd 2>/dev/null | grep "^monitoring" | grep
 
 # 7. Use it
 #    App:     http://<worker2-public-ip>:30080
-#    Grafana: http://<worker2-public-ip>:30090  (admin / admin)
+#    Grafana: http://<worker2-public-ip>:30030  (admin / admin)
 
 # 8. Pre-destroy sanity check — wait for Grafana then confirm everything is green
 until kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana 2>/dev/null | grep -q "3/3.*Running"; do echo "$(date +%H:%M:%S) waiting for Grafana..."; sleep 10; done && echo "Grafana ready"
@@ -46,7 +46,7 @@ kubectl get pods -n monitoring
 #   All 5 app pods: Running
 #   All monitoring pods: Running
 #   Frontend works:  http://<worker2-public-ip>:30080
-#   Grafana works:   http://<worker2-public-ip>:30090
+#   Grafana works:   http://<worker2-public-ip>:30030
 
 # 9. Teardown (stay in free tier)
 cd ../terraform && terraform destroy -auto-approve
