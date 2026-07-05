@@ -83,10 +83,17 @@ No evidence of the original hammering/OOM behavior. Made permanent: `automated: 
 selfHeal: true }` added back to `argocd/apps/monitoring.yaml` in git, `CLAUDE.md` and `Steps/08`
 updated to match.
 
-One unrelated issue surfaced during this test and is worth documenting for future fresh-cluster
-runs: right after `ansible-playbook` finishes, `skywatch-root` can sit at `Unknown` sync status
-because `argocd-application-controller` starts querying `argocd-repo-server` a few seconds before
-repo-server's Service endpoints are ready (`connection refused` on a single comparison attempt,
-never auto-retried). Fix is a hard refresh:
-`kubectl patch application skywatch-root -n argocd --type merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}'`.
-Not yet turned into an Ansible readiness gate — worth doing if it recurs on future fresh clusters.
+One unrelated issue surfaced during this test and is now fixed: right after `ansible-playbook`
+finished, `skywatch-root` sat at `Unknown` sync status because `argocd-application-controller`
+started querying `argocd-repo-server` a few seconds before repo-server's Service endpoints were
+ready (`connection refused` on a single comparison attempt, never auto-retried). Worked around live
+with a hard refresh
+(`kubectl patch application skywatch-root -n argocd --type merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}'`).
+
+Root cause: `Steps/00-START-HERE.md`'s Gate 1 was always documented as "CRD Established AND
+`application-controller`/`repo-server`/`redis` Ready", but `ansible/roles/bootstrap/tasks/main.yml`
+only ever implemented the CRD half — the component-readiness half was never actually written.
+**Fixed:** added three `kubernetes.core.k8s_info` wait loops (repo-server, redis,
+application-controller Deployments/StatefulSet all `readyReplicas >= 1`) before the root
+Application is applied, closing the gap between what Steps/00 promised and what the code did.
+Documented to match in `Steps/04-ansible.md`.

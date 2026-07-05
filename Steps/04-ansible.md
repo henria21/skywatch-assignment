@@ -187,6 +187,26 @@ This is the ordered bootstrap. **Order matters and is enforced by task order**, 
   retries: 30
   delay: 5
 
+# GATE 1b — application-controller/repo-server/redis must be Ready too (see Steps/00's Gate 1
+# definition). Without this, application-controller can query repo-server before its Service
+# endpoints propagate and leave skywatch-root stuck at sync status "Unknown" forever.
+- name: Wait for argocd-repo-server / argocd-redis / argocd-application-controller to be ready
+  kubernetes.core.k8s_info:
+    api_version: "{{ item.api_version }}"
+    kind: "{{ item.kind }}"
+    name: "{{ item.name }}"
+    namespace: argocd
+  register: argocd_component
+  until: >
+    argocd_component.resources | length > 0 and
+    (argocd_component.resources[0].status.readyReplicas | default(0)) >= 1
+  retries: 60
+  delay: 5
+  loop:
+    - { kind: Deployment, name: argocd-repo-server, api_version: apps/v1 }
+    - { kind: Deployment, name: argocd-redis, api_version: apps/v1 }
+    - { kind: StatefulSet, name: argocd-application-controller, api_version: apps/v1 }
+
 - name: Ensure skywatch namespace exists (BEFORE the secret)
   kubernetes.core.k8s:
     state: present

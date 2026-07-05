@@ -99,6 +99,54 @@
         rabbitmq-username:     "{{ vault_rabbitmq_user }}"
         rabbitmq-password:     "{{ vault_rabbitmq_password }}"
 
+# GATE 1b — application-controller/repo-server/redis must be Ready before the root app is
+# applied (this half of Gate 1, documented in Steps/00 since the start, was never actually
+# implemented — only the CRD check below it existed). Without this, application-controller
+# can query repo-server a few seconds before its Service endpoints propagate, get a single
+# "connection refused", and leave skywatch-root stuck at sync status "Unknown" forever (it
+# isn't auto-retried) until someone forces a hard refresh.
+- name: Wait for argocd-repo-server to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: argocd-repo-server
+    namespace: argocd
+  register: repo_server
+  until: >
+    repo_server.resources is defined and repo_server.resources | length > 0 and
+    (repo_server.resources[0].status.readyReplicas | default(0)) >= 1
+  retries: 60
+  delay: 5
+
+- name: Wait for argocd-redis to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: argocd-redis
+    namespace: argocd
+  register: argocd_redis
+  until: >
+    argocd_redis.resources is defined and argocd_redis.resources | length > 0 and
+    (argocd_redis.resources[0].status.readyReplicas | default(0)) >= 1
+  retries: 60
+  delay: 5
+
+- name: Wait for argocd-application-controller to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: StatefulSet
+    name: argocd-application-controller
+    namespace: argocd
+  register: app_controller
+  until: >
+    app_controller.resources is defined and app_controller.resources | length > 0 and
+    (app_controller.resources[0].status.readyReplicas | default(0)) >= 1
+  retries: 60
+  delay: 5
+
 - name: Apply the ArgoCD root application
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
