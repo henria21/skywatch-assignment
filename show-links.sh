@@ -27,7 +27,7 @@ cat > "$HTML" <<EOF
 <a href="http://${WORKER2}:30080" target="_blank">Frontend — http://${WORKER2}:30080</a>
 <a href="http://${WORKER1}:30082" target="_blank">ArgoCD — http://${WORKER1}:30082</a>
 <p class="note">ArgoCD login: admin / ${ARGOCD_PASS:-run: kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath=\'{.data.password}\' | base64 -d}</p>
-<a href="http://${WORKER2}:30090" target="_blank">Grafana — http://${WORKER2}:30090</a>
+<a href="http://${WORKER2}:30030" target="_blank">Grafana — http://${WORKER2}:30030</a>
 <p class="note">Grafana login: admin / admin</p>
 </body>
 </html>
@@ -37,7 +37,7 @@ echo "Generated: $HTML"
 echo ""
 echo "  Frontend : http://${WORKER2}:30080"
 echo "  ArgoCD   : http://${WORKER1}:30082  (admin / ${ARGOCD_PASS:-<see kubectl command>})"
-echo "  Grafana  : http://${WORKER2}:30090  (admin / admin)"
+echo "  Grafana  : http://${WORKER2}:30030  (admin / admin)"
 
 # Open in browser (works on WSL)
 if command -v explorer.exe &>/dev/null; then
