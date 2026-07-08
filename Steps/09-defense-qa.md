@@ -48,29 +48,40 @@ roles guard with `systemctl is-active`, and CI's bump commit carries `[skip ci]`
 
 ## B. Infrastructure & sizing
 
-**Q: Why t3.micro × 3?**
-Free-tier eligible (750 instance-hours/month, first 12 months). Three nodes for a ~10h session is
-~30 hours — well inside the limit — and I destroy the cluster after every session.
+**Q: Why t3.small × 3?**
+The project started on free-tier t3.micro × 3, and the 1 GiB nodes were workable but left zero
+headroom — every heavy moment (CRD install, repo-server rendering kube-prometheus-stack, Prometheus
+startup) was an OOM risk. I applied my own stated mitigation and bumped all three to t3.small
+(2 GiB): a few cents per session since the cluster is destroyed after each one, in exchange for a
+demo that can't be killed by a scrape burst. The micro-era trims (resource limits, `emptyDir`,
+server-side CRD apply) stay in place — they're good hygiene regardless of node size.
 
-**Q: Why t3.micro and not t2.micro?**
-Both are free, so t2 saves nothing, and t3 is strictly better: 2 vCPU vs 1, and it launches in
-*unlimited* burst mode (never throttled), whereas t2 launches in *standard* mode and throttles to
-baseline once credits drain — which happens during K3s install + image pulls + the first ArgoCD sync,
-exactly the worst moment.
+**Q: Why the t3 family and not t2?**
+t3 is strictly better at the same price point: 2 vCPU vs 1, and it launches in *unlimited* burst
+mode (never throttled), whereas t2 launches in *standard* mode and throttles to baseline once
+credits drain — which happens during K3s install + image pulls + the first ArgoCD sync, exactly the
+worst moment.
 
 **Q: You hit memory pressure. Why not add a 4th node just for Prometheus?**
-Because it spends the free tier to fix only half the problem. A 4th node helps the *runtime* memory
-contention on worker2, but the two harder risks — the CRD big-bang (an API-server/etcd load on
-**master**) and `repo-server` rendering the big chart (on **worker1**) — aren't on the Prometheus
-node, so a 4th node doesn't touch them. The cheaper, more complete fix was `emptyDir` everywhere
-(which also deletes the `ignoreDifferences` problem) and keeping all three on micro.
+Because it fixes only half the problem. A 4th node helps the *runtime* memory contention on worker2,
+but the two harder risks — the CRD big-bang (an API-server/etcd load on **master**) and
+`repo-server` rendering the big chart (on **worker1**) — aren't on the Prometheus node, so a 4th
+node doesn't touch them. Bumping all three nodes one size (micro → small) addressed every pressure
+point at once; `emptyDir` everywhere (which also deletes the `ignoreDifferences` problem) had
+already removed the storage-driven waste. Vertical scaling beat horizontal here.
+
+**Q: Why swap files on Kubernetes nodes? Kubernetes famously wants swap off.**
+Deliberate rule-breaking with a reason: a 2G swapfile on **master** (protects the API server/etcd
+during heavy helm installs) and on **worker2** (headroom for Prometheus + Grafana). K3s tolerates
+swap, and on small nodes an occasionally-slow pod beats an OOM-killed API server. In a production
+cluster with properly sized nodes I'd keep swap off and rely on requests/limits alone.
 
 ---
 
 ## C. Storage & state
 
 **Q: Why `emptyDir` for RabbitMQ and Prometheus instead of PVCs?**
-The cluster is destroyed every session, with 24h Prometheus retention on a node that lives ~10 hours.
+The cluster is destroyed every session, with 6h Prometheus retention on a node that lives ~10 hours.
 Persistence survives nothing — the volume is thrown away before the retention window even closes. So
 PVCs add cost and complexity for zero benefit. `emptyDir` also removes `volumeClaimTemplates`, which
 is what removed the perpetual-OutOfSync `ignoreDifferences` hack entirely.
@@ -133,6 +144,22 @@ because Git is still the source of truth and re-applying the root rebuilds every
 Prune only removes resources ArgoCD *tracks* — ones it applied from Git, carrying its tracking
 annotation. A hand-created secret has no tracking metadata, so ArgoCD ignores it entirely.
 
+**Q: Is auto-sync on everywhere? Was it always?**
+It's on (prune + selfHeal) for all apps now, but the monitoring app had it disabled for a while —
+on the t3.micro nodes, selfHeal's constant re-rendering of kube-prometheus-stack hammered
+repo-server and the API server. After the move to t3.small I capped `repoServer.resources`
+(768Mi limit) and live-tested selfHeal for 18+ minutes — no restarts, low CPU/memory — before
+re-enabling it. The point: auto-sync was disabled for a measured reason and re-enabled on evidence,
+not vibes.
+
+**Q: How do you know ArgoCD is actually ready before you apply the root app?**
+Two gates in the Ansible bootstrap. Gate 1: wait until the `applications.argoproj.io` CRD is
+Established — you can't apply an Application before its CRD exists. Gate 1b: wait until
+repo-server, redis, and the application-controller all report Ready. Without 1b there's a real
+race: the controller can query repo-server seconds before its Service endpoints propagate, get one
+"connection refused", and leave the root app stuck at sync status `Unknown` forever — that state
+isn't auto-retried, so a human would have to force a hard refresh. Found it by hitting it.
+
 **Q: Why is the ServiceMonitor in the skywatch chart and not the monitoring app?**
 Deliberate: the app owns its own observability contract — it declares the target it wants scraped.
 The cost is the wave-0→wave-1 dependency, which the sync-waves handle. The alternative (ServiceMonitor
@@ -155,8 +182,9 @@ not own a resource that's managed out-of-band.
 
 **Q: Why not Sealed Secrets or SOPS?**
 That's the more "pure" GitOps answer and I'd reach for it in production — encrypted secret committed to
-Git, decrypted in-cluster by a controller. For this scope I chose vault + out-of-band create to avoid
-running an extra controller on a 1 GiB node. It's a conscious scope tradeoff, not an oversight.
+Git, decrypted in-cluster by a controller. For this scope I chose vault + out-of-band create to
+avoid running an extra controller on already-tight nodes. It's a conscious scope tradeoff, not an
+oversight.
 
 **Q: Downside of out-of-band secrets?**
 Bootstrap ordering becomes load-bearing: the namespace and secret must exist before the first app
@@ -194,22 +222,24 @@ including the bump commit. The `if: github.event_name == 'push'` guards enforce 
 - **Metrics are session-only.** No long-term Prometheus history — intentional, the node is destroyed
   nightly.
 - **The GitOps engine bootstrap is imperative.** Ansible installs ArgoCD; unavoidable, and standard.
-- **Chart/version pins use `"*"` in the runbook templates.** Before submission, pin the ArgoCD Helm
-  chart, `prometheus-operator-crds`, and `kube-prometheus-stack` to concrete versions — `"*"` in
-  production GitOps is itself a smell, and pinning is the K3s-OOM lesson applied to charts.
-- **All three nodes are 1 GiB.** Headroom is tight; the swap file on worker2 is the safety margin for
-  Prometheus + Grafana. If a demo must not risk an OOM, the honest mitigation is bumping worker2 to
-  t3.small/medium (~$0.42–$1.25/session), not adding a node.
+- **The cluster costs money now.** Moving off free-tier t3.micro to t3.small was the honest
+  mitigation for OOM risk — cents per session against a demo that can't die mid-viva. All chart
+  versions are pinned (ArgoCD Helm chart `7.3.11`, `prometheus-operator-crds` `30.0.1`,
+  `kube-prometheus-stack` `87.10.1`) — the K3s-OOM lesson applied to charts.
+- **Headroom is still finite.** 2 GiB nodes, with 2G swap on master (API server safety during helm
+  bursts) and worker2 (Prometheus + Grafana margin). Every component carries explicit
+  requests/limits; the stack fits with room to spare, but it isn't sized for real traffic.
 
 ---
 
 ## H. The 60-second summary (if they ask you to pitch the whole thing)
 A weather-query pipeline where the *app* is deliberately trivial so the *delivery pipeline* can be the
-star: Terraform provisions three free-tier nodes, Ansible installs K3s and bootstraps ArgoCD, GitHub
+star: Terraform provisions three t3.small nodes, Ansible installs K3s and bootstraps ArgoCD, GitHub
 Actions builds SHA-tagged images to GHCR and commits the tag bump, and ArgoCD reconciles everything —
 app and monitoring — from Git via app-of-apps with sync-waves. Every stateful piece is `emptyDir`
 because the cluster is cattle, not pets: nothing in-cluster is meant to survive a destroy, and
 everything needed to rebuild it lives in Git, an encrypted vault, and an image registry. The one
-broker is RPC-style request/response, the one secret is out-of-Git by design, and the handful of
-1 GiB-node constraints are met with deliberate trims (Alertmanager off, slim resource limits, TCP
-probes, server-side CRD apply) rather than by throwing money at bigger instances.
+broker is RPC-style request/response, the one secret is out-of-Git by design, and the small-node
+constraints are met with deliberate engineering (explicit resource limits on every component, TCP
+probes, server-side CRD apply, readiness gates in the bootstrap, swap as a safety net) — with one
+honest concession to reality: bumping micro to small when 1 GiB proved to be a demo-killing risk.

@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SkyWatch — Defense Quiz</title>
+<style>
+  :root {
+    --bg: #0f172a; --card: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+    --good: #4ade80; --bad: #f87171;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; padding: 2rem 1rem; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: .25rem; }
+  .sub { color: var(--muted); font-size: .9rem; margin-bottom: 1.5rem; }
+  .progress { height: 6px; background: var(--border); border-radius: 3px; margin-bottom: 1.5rem; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+  .qnum { color: var(--accent); font-size: .8rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; margin-bottom: .5rem; }
+  .qtext { font-size: 1.1rem; line-height: 1.5; margin-bottom: 1.25rem; }
+  .opt { display: flex; gap: .75rem; align-items: flex-start; width: 100%; text-align: left;
+         background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+         color: var(--text); padding: .85rem 1rem; margin-bottom: .6rem; cursor: pointer;
+         font-size: .95rem; line-height: 1.45; transition: border-color .15s, background .15s; }
+  .opt:hover:not(:disabled) { border-color: var(--accent); }
+  .opt:disabled { cursor: default; }
+  .opt .letter { font-weight: 700; color: var(--accent); flex-shrink: 0; }
+  .opt.correct { border-color: var(--good); background: rgba(74,222,128,.08); }
+  .opt.wrong   { border-color: var(--bad);  background: rgba(248,113,113,.08); }
+  .expl { margin-top: 1rem; padding: 1rem; border-radius: 8px; font-size: .92rem; line-height: 1.5; display: none; }
+  .expl.show { display: block; }
+  .expl.good { background: rgba(74,222,128,.1); border: 1px solid var(--good); }
+  .expl.bad  { background: rgba(248,113,113,.1); border: 1px solid var(--bad); }
+  .expl b { display: block; margin-bottom: .3rem; }
+  .nav { margin-top: 1.25rem; display: flex; justify-content: space-between; align-items: center; }
+  .score-live { color: var(--muted); font-size: .9rem; }
+  button.btn { background: var(--accent); color: #082f49; font-weight: 700; border: none;
+               border-radius: 8px; padding: .7rem 1.5rem; font-size: .95rem; cursor: pointer; }
+  button.btn:disabled { opacity: .35; cursor: default; }
+  .result { text-align: center; padding: 2rem 1rem; }
+  .result .big { font-size: 3rem; font-weight: 800; margin: .5rem 0; }
+  .result .verdict { font-size: 1.1rem; margin-bottom: 1.5rem; color: var(--muted); }
+  .review { text-align: left; margin-top: 1.5rem; }
+  .review-item { border-top: 1px solid var(--border); padding: .8rem 0; font-size: .9rem; }
+  .review-item .rq { margin-bottom: .25rem; }
+  .review-item .ra { color: var(--muted); }
+  .mark-good { color: var(--good); font-weight: 700; }
+  .mark-bad { color: var(--bad); font-weight: 700; }
+  code { background: rgba(148,163,184,.15); padding: .1em .35em; border-radius: 4px; font-size: .9em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🌤️ SkyWatch — Project Defense Quiz</h1>
+  <p class="sub">20 questions · options shuffled every run · correct answers evenly spread across A–D</p>
+  <div class="progress"><div id="bar"></div></div>
+  <div class="card" id="card"></div>
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    q: "Why does the frontend declare an <em>exclusive, auto-named</em> reply queue for every request instead of one shared named reply queue?",
+    correct: "It's collision-proof and self-cleaning: the broker assigns a unique name and deletes the queue when the connection closes, so requests can never cross wires.",
+    wrong: [
+      "Exclusive queues are durable by default, so replies survive a broker restart.",
+      "A shared queue would require enabling the RabbitMQ management plugin, which is disabled to save RAM.",
+      "Auto-named queues bypass the AMQP authentication layer, reducing per-request latency."
+    ],
+    expl: "Empty-name + exclusive=True → broker-assigned unique name, auto-deleted with the connection. No cleanup job, no correlation collisions, no sticky sessions."
+  },
+  {
+    q: "When exactly does the worker <code>ack</code> a job message, and why?",
+    correct: "Only after the reply has been published — so a crash mid-flight causes redelivery to another worker instead of a lost request.",
+    wrong: [
+      "Immediately on receipt, so RabbitMQ can dispatch the next job without waiting.",
+      "It uses auto-ack because prefetch=1 already guarantees at-most-once delivery.",
+      "After a 15-second timer, matching the frontend's RPC timeout window."
+    ],
+    expl: "Manual ack AFTER publish + prefetch=1: a dead worker's message is redelivered, the retry is just another harmless GET, and any duplicate reply is discarded by correlation_id."
+  },
+  {
+    q: "Why is there deliberately no app-level idempotency key?",
+    correct: "The worker is stateless — a pure GET to Open-Meteo persists nothing, so redelivery at worst produces a duplicate reply the frontend discards by correlation_id.",
+    wrong: [
+      "RabbitMQ's deduplication plugin already filters duplicate message bodies at the broker.",
+      "The exclusive reply queue rejects any second message with the same routing key.",
+      "Idempotency keys require durable queues, which conflict with the emptyDir broker."
+    ],
+    expl: "Idempotency that IS present is structural: declarative Terraform/Helm/ArgoCD, Ansible guards with systemctl is-active, CI's [skip ci] bump commit."
+  },
+  {
+    q: "Why did the cluster move from t3.micro to t3.small?",
+    correct: "The 1 GiB nodes repeatedly OOMed running K3s + etcd + ArgoCD + kube-prometheus-stack; 2 GiB is the minimum viable size for this stack.",
+    wrong: [
+      "t3.micro instances aren't allowed to attach the security group self-reference rule.",
+      "The NodePort range 30000–32767 is only supported on t3.small and larger instance types.",
+      "K3s v1.29.5 dropped support for single-vCPU instance types."
+    ],
+    expl: "Verified in git history: commits like 'prevent ArgoCD OOM crashes'. Cost stays trivial: ~$0.023/hr/node ≈ $0.69 per 10h session, destroyed after every session."
+  },
+  {
+    q: "A worker node can't reach the master on port 6443 during the K3s join. What's the classic cause in this project?",
+    correct: "The join URL used the master's public IP — intra-VPC traffic to a public IP egresses via the Internet Gateway and bypasses the security-group self-rule.",
+    wrong: [
+      "The master's NoSchedule taint also blocks inbound API traffic from tainted-away nodes.",
+      "Port 6443 is outside the NodePort range that the security group opens.",
+      "The K3s agent defaults to port 443 unless Traefik is disabled on the server."
+    ],
+    expl: "Fix: K3S_URL must use the master's PRIVATE IP so the SG self-rule applies. This is why the inventory template carries master_private_ip."
+  },
+  {
+    q: "Why is <code>--tls-san &lt;public_ip&gt;</code> passed at K3s server install?",
+    correct: "So the API server's TLS certificate includes the public IP, letting kubectl from the laptop pass certificate validation.",
+    wrong: [
+      "It registers the public IP as the node's InternalIP so workers can join over the internet.",
+      "It enables SAN-based mutual TLS between ArgoCD and the repo server.",
+      "It tells Terraform which IP to write into the Ansible inventory template."
+    ],
+    expl: "Without it the cert only covers internal names/IPs → TLS error from the laptop. The kubeconfig is also rewritten from 127.0.0.1 to the public IP."
+  },
+  {
+    q: "Why must the Ansible playbook never be run with <code>--limit workers</code>?",
+    correct: "Limiting skips the master play, so the k3s_token fact is never set and the workers' join fails.",
+    wrong: [
+      "--limit disables vault decryption, so the RabbitMQ secret task errors out.",
+      "The swap-file tasks only run when every host in the inventory is targeted at once.",
+      "Ansible's kubernetes.core collection refuses to run against a partial inventory."
+    ],
+    expl: "The worker play reads hostvars from the master play (the join token slurped from /var/lib/rancher/k3s/server/node-token). Always run the whole playbook — it's idempotent anyway."
+  },
+  {
+    q: "Why was <code>rabbitmq-secret.yaml</code> deleted from the Helm chart?",
+    correct: "If the chart rendered a placeholder secret, ArgoCD selfHeal would overwrite the real Ansible-created secret with that placeholder — guaranteed breakage.",
+    wrong: [
+      "Helm cannot template Secret resources when ServerSideApply is enabled.",
+      "The secret exceeded the 262144-byte annotation limit and failed to apply.",
+      "GHCR requires that image-pull credentials live outside the chart."
+    ],
+    expl: "Rule: a resource managed out-of-band must not also be owned by the chart. The secret is pre-created by Ansible from ansible-vault, before the first sync."
+  },
+  {
+    q: "The RabbitMQ secret was created by hand (well, by Ansible) — why doesn't ArgoCD's <code>prune: true</code> delete it?",
+    correct: "Prune only removes resources ArgoCD tracks — ones it applied from Git carrying its tracking metadata; a hand-created secret is invisible to it.",
+    wrong: [
+      "Secrets are on ArgoCD's built-in prune blacklist along with namespaces and CRDs.",
+      "The secret carries an argocd.argoproj.io/ignore annotation added by the bootstrap role.",
+      "Prune is disabled on the skywatch child app specifically to protect the secret."
+    ],
+    expl: "No tracking annotation → not ArgoCD's resource → ignored entirely. Same reason it survives deleting the root app."
+  },
+  {
+    q: "The assignment specified a StatefulSet for RabbitMQ. Why does this repo use a Deployment instead?",
+    correct: "With emptyDir and a single replica there's no PVC and no ordered scaling, so stable identity buys nothing — the ClusterIP Service alone provides the stable DNS name.",
+    wrong: [
+      "Deployments start faster on K3s because they skip the headless-service DNS registration.",
+      "StatefulSets can't mount secrets via envFrom, which the RabbitMQ container requires.",
+      "ArgoCD cannot selfHeal StatefulSets without ServerSideApply enabled."
+    ],
+    expl: "A StatefulSet earns its keep via stable identity for PVCs + ordered scaling. Neither applies. Bonus: dropping the PVC also killed the perpetual-OutOfSync ignoreDifferences hack."
+  },
+  {
+    q: "Why is <em>everything</em> stateful (RabbitMQ, Prometheus) on emptyDir?",
+    correct: "The cluster is destroyed every session, so persistence survives nothing — PVCs would add cost and complexity for zero benefit.",
+    wrong: [
+      "K3s on t3.small doesn't ship a default StorageClass, so PVCs would stay Pending.",
+      "emptyDir volumes are replicated across nodes, giving free redundancy.",
+      "AWS charges for EBS even in the free tier, and the course forbids any storage cost."
+    ],
+    expl: "Consistently ephemeral: queues/messages also non-durable (durable-on-emptyDir would be cargo cult). Nothing in-cluster is meant to outlive terraform destroy."
+  },
+  {
+    q: "Why must the <code>prometheus-crds</code> app run at sync-wave 0, before the skywatch app at wave 1?",
+    correct: "skywatch ships a ServiceMonitor — a CRD owned by the Prometheus operator — which would fail with 'no matches for kind ServiceMonitor' if it synced before the CRDs existed.",
+    wrong: [
+      "Wave 0 apps get higher API-server priority, which the small master node requires.",
+      "ArgoCD only applies ServerSideApply on the lowest-numbered wave in a sync.",
+      "The monitoring namespace must exist before any other app can CreateNamespace."
+    ],
+    expl: "Wave 0 = CRDs Established, then wave 1 = skywatch + monitoring. The app keeps its own ServiceMonitor (owns its observability contract); the waves make the coupling safe."
+  },
+  {
+    q: "Why is <code>ServerSideApply=true</code> mandatory on the prometheus-crds Application?",
+    correct: "The Prometheus CRDs exceed the 262144-byte client-side last-applied-configuration annotation limit and otherwise fail with 'metadata.annotations: Too long'.",
+    wrong: [
+      "Client-side apply can't create cluster-scoped resources from a namespaced Application.",
+      "Server-side apply is required for any chart pulled from a Helm repository rather than Git.",
+      "It allows the CRDs to be applied without a sync-wave annotation."
+    ],
+    expl: "Plus retry-with-backoff paces the apply — the GitOps version of the spec's manual 'kubectl apply --server-side; sleep 10' loop that protected the 1 GiB API server."
+  },
+  {
+    q: "Why does the monitoring app set <code>skipCrds: true</code> on kube-prometheus-stack?",
+    correct: "The CRDs already come from the wave-0 app; letting the chart install them too would be a big-bang apply that times out the small API server.",
+    wrong: [
+      "kube-prometheus-stack's CRDs conflict with K3s's built-in monitoring CRDs.",
+      "skipCrds is required whenever a chart is installed by ArgoCD instead of the helm CLI.",
+      "It prevents Prometheus from scraping ArgoCD's own metrics endpoints."
+    ],
+    expl: "Split responsibility: dedicated CRD app (wave 0, SSA, retry/backoff) + CRD-less chart install (wave 1). Both charts pinned (30.0.1 / 87.10.1) after the '*' regression."
+  },
+  {
+    q: "Why does <code>values.yaml</code> track the <code>:&lt;sha&gt;</code> image tag and never <code>:latest</code>?",
+    correct: "GitOps needs an immutable, reproducible reference — 'latest' is a moving pointer ArgoCD can't diff, so rollouts wouldn't be deterministic.",
+    wrong: [
+      "GHCR rate-limits pulls of the 'latest' tag on public packages.",
+      "Kubernetes always sets imagePullPolicy: Never for tags named 'latest'.",
+      "The sha tag is required so flake8 can trace lint results back to a commit."
+    ],
+    expl: "The :sha tag is unique per build, so ArgoCD detects the exact change and rolls deterministically. :latest is pushed only as a human convenience, referenced by nothing."
+  },
+  {
+    q: "With the default setup, what <em>actually</em> prevents the CI tag-bump commit from retriggering CI in an infinite loop?",
+    correct: "Pushes authenticated with the default GITHUB_TOKEN don't trigger new on:push workflow runs — by GitHub's own design; [skip ci] is only backup for PAT pushes.",
+    wrong: [
+      "The [skip ci] string is the only mechanism; without it the loop would run forever.",
+      "The concurrency group cancels any run started by a bot-authored commit.",
+      "The 'git diff --quiet' check aborts the workflow before it can push again."
+    ],
+    expl: "Belt and suspenders: GITHUB_TOKEN is the load-bearing guard; [skip ci] matters only if you switch to a PAT (PAT pushes DO retrigger). git diff --quiet just prevents empty commits."
+  },
+  {
+    q: "Why does CI download the mikefarah <code>yq</code> binary via wget instead of running <code>pip install yq</code>?",
+    correct: "They're two different, incompatible tools sharing one name — only the Go binary supports 'yq -i' in-place edits of the values file.",
+    wrong: [
+      "pip is unavailable on ubuntu-latest runners unless a Python setup action runs first.",
+      "The Python yq requires a paid API token for YAML files over 1 MB.",
+      "The Go binary is needed to sign the bump commit with the runner's GPG key."
+    ],
+    expl: "The PyPI 'yq' is a jq wrapper with different syntax and no real in-place edit. A classic trap — it's even a 'lessons learned' entry in the spec."
+  },
+  {
+    q: "What survives <code>terraform destroy</code>, and from where does a fresh cluster rebuild?",
+    correct: "Only Git (manifests, chart, ArgoCD apps, CI), the Ansible vault (encrypted secret value), and GHCR (immutable SHA-tagged images) — nothing in-cluster.",
+    wrong: [
+      "The EBS volumes persist and are re-attached by Terraform on the next apply.",
+      "ArgoCD exports its application state to S3 before the nodes terminate.",
+      "The kubeconfig and Prometheus TSDB are backed up to the master's swap file."
+    ],
+    expl: "That trio reconstructs 100% of runtime state. Broker non-durable, metrics session-only — by design, because the cluster dies nightly."
+  },
+  {
+    q: "In Kubernetes the RabbitMQ probes are TCP checks on port 5672, while docker-compose uses <code>rabbitmq-diagnostics ping</code>. Why the difference?",
+    correct: "Under the memory-watermark alarm on a small node the Erlang VM slows and the exec probe stalls/times out; a TCP check is instant and unaffected — the laptop has RAM, so compose keeps the richer check.",
+    wrong: [
+      "K3s doesn't support exec probes because it uses containerd instead of Docker.",
+      "TCP probes are mandatory for any container that mounts an emptyDir volume.",
+      "rabbitmq-diagnostics needs the management plugin, which is disabled in the k8s image."
+    ],
+    expl: "Same image (rabbitmq:3.13-management) in both; the probe choice is purely about behavior under memory pressure on constrained nodes."
+  },
+  {
+    q: "The monitoring app is stuck with a cryptic <code>comparison failed</code> error. What's the first suspect?",
+    correct: "argocd-repo-server OOMing while running 'helm template' on the large kube-prometheus-stack chart — check its memory request/limit first.",
+    wrong: [
+      "Grafana's NodePort 30030 colliding with the frontend's NodePort 30080.",
+      "The ServiceMonitor's release label not matching the serviceMonitorSelector.",
+      "etcd on the master rejecting writes because swap was never enabled."
+    ],
+    expl: "repo-server (on worker1) renders the big chart on every reconcile. That's exactly why repoServer.resources is capped (100m/256Mi req, 500m/768Mi limit) in the ArgoCD Helm install."
+  }
+];
+
+// --- Balanced shuffle: exactly 5 correct answers per position (A,B,C,D) ---
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+let order = [], state = [], idx = 0, score = 0;
+
+function buildQuiz() {
+  order = shuffle(QUESTIONS.map((_, i) => i));
+  // pool of target positions for the correct answer: 5 of each of 0..3
+  const pool = shuffle([0,0,0,0,0,1,1,1,1,1,2,2,2,2,2,3,3,3,3,3]);
+  state = order.map((qi, k) => {
+    const q = QUESTIONS[qi];
+    const pos = pool[k];
+    const wrongs = shuffle(q.wrong.slice());
+    const opts = [];
+    for (let p = 0, w = 0; p < 4; p++) {
+      opts.push(p === pos ? q.correct : wrongs[w++]);
+    }
+    return { qi, opts, correctPos: pos, picked: null };
+  });
+  idx = 0; score = 0;
+  render();
+}
+
+function render() {
+  document.getElementById('bar').style.width = (idx / state.length * 100) + '%';
+  if (idx >= state.length) return renderResult();
+  const s = state[idx], q = QUESTIONS[s.qi];
+  const card = document.getElementById('card');
+  card.innerHTML = `
+    <div class="qnum">Question ${idx + 1} / ${state.length}</div>
+    <div class="qtext">${q.q}</div>
+    ${s.opts.map((o, i) => `
+      <button class="opt" data-i="${i}">
+        <span class="letter">${'ABCD'[i]}</span><span>${o}</span>
+      </button>`).join('')}
+    <div class="expl" id="expl"></div>
+    <div class="nav">
+      <span class="score-live">Score: ${score} / ${idx}</span>
+      <button class="btn" id="next" disabled>${idx === state.length - 1 ? 'Finish' : 'Next →'}</button>
+    </div>`;
+  card.querySelectorAll('.opt').forEach(btn => btn.addEventListener('click', () => pick(+btn.dataset.i)));
+  document.getElementById('next').addEventListener('click', () => { idx++; render(); });
+}
+
+function pick(i) {
+  const s = state[idx];
+  if (s.picked !== null) return;
+  s.picked = i;
+  const right = i === s.correctPos;
+  if (right) score++;
+  const q = QUESTIONS[s.qi];
+  document.querySelectorAll('.opt').forEach((btn, bi) => {
+    btn.disabled = true;
+    if (bi === s.correctPos) btn.classList.add('correct');
+    else if (bi === i) btn.classList.add('wrong');
+  });
+  const ex = document.getElementById('expl');
+  ex.className = 'expl show ' + (right ? 'good' : 'bad');
+  ex.innerHTML = `<b>${right ? '✔ Correct' : '✘ Not quite — correct answer: ' + 'ABCD'[s.correctPos]}</b>${q.expl}`;
+  document.querySelector('.score-live').textContent = `Score: ${score} / ${idx + 1}`;
+  document.getElementById('next').disabled = false;
+}
+
+function renderResult() {
+  document.getElementById('bar').style.width = '100%';
+  const pct = Math.round(score / state.length * 100);
+  const verdict = pct >= 90 ? "Defense-ready. State the tradeoffs and you're golden."
+    : pct >= 75 ? "Solid — reread the sections you missed in STUDY-NOTES.md."
+    : pct >= 50 ? "Getting there. Focus on GitOps ordering and the secret contract."
+    : "Time for another pass through the study notes before the viva.";
+  const card = document.getElementById('card');
+  card.innerHTML = `
+    <div class="result">
+      <div>Final score</div>
+      <div class="big">${score} / ${state.length} <span style="font-size:1.2rem;color:var(--muted)">(${pct}%)</span></div>
+      <div class="verdict">${verdict}</div>
+      <button class="btn" id="retry">Retake (new shuffle)</button>
+      <div class="review">
+        ${state.map((s, k) => {
+          const q = QUESTIONS[s.qi];
+          const ok = s.picked === s.correctPos;
+          return `<div class="review-item">
+            <div class="rq"><span class="${ok ? 'mark-good' : 'mark-bad'}">${ok ? '✔' : '✘'}</span> ${k + 1}. ${q.q}</div>
+            <div class="ra">${ok ? '' : '→ ' + q.correct}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  document.getElementById('retry').addEventListener('click', buildQuiz);
+}
+
+buildQuiz();
+</script>
+</body>
+</html>
