@@ -147,6 +147,20 @@ is a **large** chart. If repo-server OOMs mid-render you get a cryptic `comparis
 obvious cause. `repoServer.resources` is now set in the ArgoCD Helm values (file 04:
 100m/256Mi request, 500m/768Mi limit) — check there first if monitoring won't sync.
 
+## Why NOT HPA for ArgoCD (reminder for next scale-up)
+Considered 2026-07-09, rejected. If revisiting when the cluster grows, remember why:
+- `global.nodeSelector` pins every ArgoCD pod to worker1, so HPA replicas land on the **same node**
+  — same 2 GB split into more pods, zero added capacity. Horizontal scaling only pays off once
+  ArgoCD pods can spread across nodes.
+- The historical failure mode is **memory pressure, not throughput** (see repo-server OOM above).
+  Each repo-server replica clones + renders the repo independently, so 2 replicas ≈ 2× RAM — HPA
+  under memory pressure makes the problem worse.
+- `application-controller` can't HPA at all: it scales by **sharding across clusters**. With one
+  cluster, a second replica sits idle. Only `server` and `repoServer` have `autoscaling.enabled`
+  in the argo-helm chart.
+- The cheap stability win instead: add requests/limits to `controller`, `server`, and `redis` in
+  the bootstrap Helm install (file 04) — only `repoServer` has them today.
+
 ## Done when
 
 - `kubectl get applications -n argocd` shows `skywatch-root`, `prometheus-crds`, `skywatch-assignment`,
