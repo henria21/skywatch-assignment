@@ -6,7 +6,13 @@ INVENTORY="$(dirname "$0")/ansible/inventory.ini"
 WORKER1=$(grep "node_role=worker$" "$INVENTORY" | awk '{print $1}')
 WORKER2=$(grep "node_role=worker2" "$INVENTORY" | awk '{print $1}')
 
-ARGOCD_PASS=$(kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
+# kubectl lives inside WSL (snap); from Git Bash go through a WSL login shell
+if command -v kubectl &>/dev/null; then
+  kc() { kubectl "$@"; }
+else
+  kc() { wsl.exe -e bash -lc "kubectl $*"; }
+fi
+ARGOCD_PASS=$(kc get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
 
 HTML="$(dirname "$0")/links.html"
 cat > "$HTML" <<EOF
@@ -39,7 +45,12 @@ echo "  Frontend : http://${WORKER2}:30080"
 echo "  ArgoCD   : http://${WORKER1}:30082  (admin / ${ARGOCD_PASS:-<see kubectl command>})"
 echo "  Grafana  : http://${WORKER2}:30030  (admin / admin)"
 
-# Open in browser (works on WSL)
+# Open in browser (WSL uses wslpath, Git Bash uses cygpath)
 if command -v explorer.exe &>/dev/null; then
-  explorer.exe "$(wslpath -w "$HTML")"
+  # explorer.exe returns 1 even on success
+  if command -v wslpath &>/dev/null; then
+    explorer.exe "$(wslpath -w "$HTML")" || true
+  elif command -v cygpath &>/dev/null; then
+    explorer.exe "$(cygpath -w "$HTML")" || true
+  fi
 fi
