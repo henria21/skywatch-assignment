@@ -169,6 +169,37 @@ output "master_public_ip"  { value = aws_instance.node["master"].public_ip }
 output "worker2_public_ip" { value = aws_instance.node["worker2"].public_ip }
 ```
 
+## Optional improvement — remote state on S3 instead of local `terraform.tfstate`
+Currently state lives as a local file (gitignored, see top of this doc). An S3 backend is the
+production-grade alternative:
+
+```hcl
+terraform {
+  backend "s3" {
+    bucket         = "skywatch-tfstate-<account-id>"   # must exist before terraform init
+    key            = "skywatch/terraform.tfstate"
+    region         = "eu-west-1"
+    encrypt        = true
+    dynamodb_table = "skywatch-tfstate-lock"           # optional: state locking
+  }
+}
+```
+Migrate existing state with `terraform init -migrate-state` (Terraform copies the local state up).
+
+Benefits over the local file:
+- **Can't lose it / can't leak it** — today the state (which contains resource IDs and any secrets
+  in outputs) exists only on one laptop; a disk wipe orphans the whole cluster, and the only thing
+  keeping it out of git is `.gitignore`. S3 + `encrypt = true` removes both risks.
+- **Team / multi-machine access** — anyone (or CI) with AWS credentials can `plan`/`apply`; no
+  more "the state is on the other machine".
+- **Locking** — with the DynamoDB table, two concurrent `apply` runs can't corrupt state.
+- **Versioning** — enable S3 bucket versioning and every state revision is recoverable; local
+  files have only the single `.backup`.
+
+Cost is effectively zero (KB-sized object). Trade-off: a chicken-and-egg bucket that must be
+created outside this Terraform config (console, CLI, or a separate tiny bootstrap config), and
+teardown order matters — destroy the cluster before deleting the bucket.
+
 ## Done when
 
 ```bash
